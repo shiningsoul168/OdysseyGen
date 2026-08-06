@@ -78,7 +78,7 @@ AI 接口响应耗时 15-20 秒，通过 `@Async` 异步执行 + Redis 任务状
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/[你的GitHub用户名]/OdysseyGen.git
+git clone https://github.com/shiningsoul168/OdysseyGen.git
 cd OdysseyGen
 
 # 2. 创建本地配置文件（application-local.yml 已加入 .gitignore，不会被提交）
