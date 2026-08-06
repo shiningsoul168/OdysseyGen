@@ -1,0 +1,62 @@
+server:
+  port: 8080
+
+spring:
+  # ========== 数据源配置 ==========
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/career_plan?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:your_password_here}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  # ========== Redis 配置 ==========
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+        timeout: 6000ms
+
+  # ========== Jackson 时间格式 ==========
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+# ========== MyBatis-Plus 配置 ==========
+mybatis-plus:
+  type-aliases-package: com.odysseygen.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 开发环境打印 SQL
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# ========== JWT 配置 ==========
+jwt:
+  secret: ${JWT_SECRET:your_jwt_secret_here}  # 生产环境请更换为强密钥
+  expiration: ${JWT_EXPIRATION:86400000}              # 24小时（毫秒）
+
+# ========== DeepSeek API 配置 ==========
+deepseek:
+  api:
+    key: ${DEEPSEEK_API_KEY:your_api_key_here}
+    url: https://api.deepseek.com/v1/chat/completions
+    model: deepseek-v4-pro   # ✅ 新增
+
+# ========== 日志配置 ==========
+logging:
+  level:
+    com.odysseygen: debug
+    org.springframework.security: info
