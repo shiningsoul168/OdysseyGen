@@ -81,7 +81,7 @@ AI 接口响应耗时 15-20 秒，通过 `@Async` 异步执行 + Redis 任务状
 git clone https://github.com/shiningsoul168/OdysseyGen.git
 cd OdysseyGen
 
-# 2. 创建本地配置文件（application-local.yml 已加入 .gitignore，不会被提交）
+# 2. 创建本地配置文件
 cp src/main/resources/application.yml src/main/resources/application-local.yml
 
 # 3. 修改 application-local.yml 中的敏感配置
