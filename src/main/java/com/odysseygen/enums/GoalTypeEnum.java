@@ -17,9 +17,14 @@ public enum GoalTypeEnum {
     }
 
     public static GoalTypeEnum fromCode(Integer code) {
+        if (code == null) return null;
         for (GoalTypeEnum e : values()) {
             if (e.code.equals(code)) return e;
         }
         return null;
+    }
+
+    public boolean matches(Integer code) {
+        return this.code.equals(code);
     }
 }

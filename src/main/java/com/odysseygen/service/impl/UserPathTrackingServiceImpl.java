@@ -6,6 +6,8 @@ import com.odysseygen.dto.request.TrackPathRequest;
 import com.odysseygen.dto.response.UserPathTrackingResponse;
 import com.odysseygen.entity.PlanRecord;
 import com.odysseygen.entity.UserPathTracking;
+import com.odysseygen.enums.PathTypeEnum;
+import com.odysseygen.enums.TrackingStatusEnum;
 import com.odysseygen.mapper.PlanRecordMapper;
 import com.odysseygen.mapper.UserPathTrackingMapper;
 import com.odysseygen.service.MilestoneTrackingService;
@@ -27,9 +29,9 @@ public class UserPathTrackingServiceImpl implements UserPathTrackingService {
     private final PlanRecordMapper planRecordMapper;
     private final MilestoneTrackingService milestoneService;
 
-    private static final int STATUS_IN_PROGRESS = 1;
-    private static final int STATUS_COMPLETED = 2;
-    private static final int STATUS_ABANDONED = 3;
+    private static final int STATUS_IN_PROGRESS = TrackingStatusEnum.IN_PROGRESS.getCode();
+    private static final int STATUS_COMPLETED = TrackingStatusEnum.COMPLETED.getCode();
+    private static final int STATUS_ABANDONED = TrackingStatusEnum.ABANDONED.getCode();
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -136,22 +138,10 @@ public class UserPathTrackingServiceImpl implements UserPathTrackingService {
         response.setPlanId(tracking.getPlanId());
         response.setPathType(tracking.getPathType());
 
-        String pathTypeLabel = switch (tracking.getPathType()) {
-            case 1 -> "主流路径";
-            case 2 -> "备用路径";
-            case 3 -> "理想路径";
-            default -> "未知";
-        };
-        response.setPathTypeLabel(pathTypeLabel);
+        response.setPathTypeLabel(PathTypeEnum.labelOf(tracking.getPathType()));
 
         response.setStatus(tracking.getStatus());
-        String statusLabel = switch (tracking.getStatus()) {
-            case 1 -> "进行中";
-            case 2 -> "已完成";
-            case 3 -> "已放弃";
-            default -> "未知";
-        };
-        response.setStatusLabel(statusLabel);
+        response.setStatusLabel(TrackingStatusEnum.labelOf(tracking.getStatus()));
 
         if (tracking.getStartedAt() != null) {
             response.setStartedAt(tracking.getStartedAt().format(FORMATTER));

@@ -36,6 +36,8 @@ public class UserInfo {
 
     private Integer status;               // 1-正常 0-禁用
 
+    private String role;                  // 角色：USER / ADMIN
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

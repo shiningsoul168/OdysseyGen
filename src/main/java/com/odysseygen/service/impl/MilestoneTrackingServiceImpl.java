@@ -7,6 +7,7 @@ import com.odysseygen.dto.response.MilestoneProgressResponse;
 import com.odysseygen.dto.response.PathResponse;
 import com.odysseygen.entity.UserMilestoneTracking;
 import com.odysseygen.entity.UserPathTracking;
+import com.odysseygen.enums.MilestoneStatusEnum;
 import com.odysseygen.mapper.UserMilestoneTrackingMapper;
 import com.odysseygen.mapper.UserPathTrackingMapper;
 import com.odysseygen.service.MilestoneTrackingService;
@@ -31,8 +32,8 @@ public class MilestoneTrackingServiceImpl implements MilestoneTrackingService {
     private final UserPathTrackingMapper trackingMapper;
     private final PlanService planService;
 
-    private static final int STATUS_NOT_STARTED = 0;
-    private static final int STATUS_COMPLETED = 2;
+    private static final int STATUS_NOT_STARTED = MilestoneStatusEnum.NOT_STARTED.getCode();
+    private static final int STATUS_COMPLETED = MilestoneStatusEnum.COMPLETED.getCode();
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -113,7 +114,7 @@ public class MilestoneTrackingServiceImpl implements MilestoneTrackingService {
 
         // 2. 检查状态流转合法性
         Integer newStatus = request.getStatus();
-        if (newStatus < 0 || newStatus > 2) {
+        if (MilestoneStatusEnum.fromCode(newStatus) == null) {
             throw new BusinessException("状态值无效");
         }
 

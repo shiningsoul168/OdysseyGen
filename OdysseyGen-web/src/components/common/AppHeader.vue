@@ -180,7 +180,10 @@ const goHistory = () => router.push('/history')
 
 // ====== 生命周期 ======
 onMounted(() => {
-  loadUserInfo()
+  // 未登录（无 token）时跳过加载用户信息，避免无谓的 401 请求
+  if (localStorage.getItem('token')) {
+    loadUserInfo()
+  }
 })
 </script>
 

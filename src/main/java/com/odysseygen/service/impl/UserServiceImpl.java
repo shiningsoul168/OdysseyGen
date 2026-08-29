@@ -18,7 +18,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 
@@ -83,7 +83,7 @@ public class UserServiceImpl implements UserService {
         }
 
         // 4. 生成 Token
-        String token = jwtUtil.generateToken(user.getUserId(), user.getUsername());
+        String token = jwtUtil.generateToken(user.getUserId(), user.getUsername(), user.getRole());
 
         return new LoginResponse(token, user.getUserId(), user.getUsername(), user.getAvatar());
     }

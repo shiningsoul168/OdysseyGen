@@ -1,6 +1,5 @@
 package com.odysseygen.aspect;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -19,7 +18,6 @@ import java.util.UUID;
 @Slf4j
 public class ControllerLogAspect {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private static final long SLOW_THRESHOLD = 3000;
 
     @Pointcut("execution(* com.odysseygen.controller..*.*(..))")
@@ -44,15 +42,15 @@ public class ControllerLogAspect {
             long cost = System.currentTimeMillis() - startTime;
 
             if (cost > SLOW_THRESHOLD) {
-                log.warn("🐢 【慢接口】{} {} 耗时: {}ms", httpMethod, requestUrl, cost);
+                log.warn("🐢 【慢接口】{} {} {} 耗时: {}ms", methodName, httpMethod, requestUrl, cost);
             } else {
-                log.info("⬅️ 【响应】{} {} 耗时: {}ms", httpMethod, requestUrl, cost);
+                log.info("⬅️ 【响应】{} {} {} 耗时: {}ms", methodName, httpMethod, requestUrl, cost);
             }
             return result;
 
         } catch (Exception e) {
             long cost = System.currentTimeMillis() - startTime;
-            log.error("❌ 【异常】{} {} 耗时: {}ms", httpMethod, requestUrl, cost, e.getMessage(), e);
+            log.error("❌ 【异常】{} {} {} 耗时: {}ms", methodName, httpMethod, requestUrl, cost, e);
             throw e;
 
         } finally {

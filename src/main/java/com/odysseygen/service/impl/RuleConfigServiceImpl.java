@@ -8,13 +8,14 @@ import com.odysseygen.dto.response.RuleConfigResponse;
 import com.odysseygen.entity.RuleConfig;
 import com.odysseygen.mapper.RuleConfigMapper;
 import com.odysseygen.service.RuleConfigService;
-import com.odysseygen.service.rule.RuleEngine;
+import com.odysseygen.service.rule.impl.FallbackRuleEngine;
+import com.odysseygen.service.rule.impl.SalaryRuleEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -26,7 +27,8 @@ import java.util.List;
 public class RuleConfigServiceImpl implements RuleConfigService {
 
     private final RuleConfigMapper ruleConfigMapper;
-    private final RuleEngine ruleEngine;
+    private final SalaryRuleEngine salaryRuleEngine;
+    private final FallbackRuleEngine fallbackRuleEngine;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -66,7 +68,7 @@ public class RuleConfigServiceImpl implements RuleConfigService {
         ruleConfigMapper.insert(rule);
 
         // 4. 刷新缓存
-        ruleEngine.refreshCache();
+        refreshAllRuleCaches();
 
         log.info("新增规则成功: ruleKey={}", rule.getRuleKey());
         return convertToResponse(rule);
@@ -98,7 +100,7 @@ public class RuleConfigServiceImpl implements RuleConfigService {
         ruleConfigMapper.updateById(existing);
 
         // 5. 刷新缓存
-        ruleEngine.refreshCache();
+        refreshAllRuleCaches();
 
         log.info("更新规则成功: ruleId={}, ruleKey={}", ruleId, existing.getRuleKey());
         return convertToResponse(existing);
@@ -112,14 +114,20 @@ public class RuleConfigServiceImpl implements RuleConfigService {
             throw new BusinessException(404, "规则不存在");
         }
         ruleConfigMapper.deleteById(ruleId);
-        ruleEngine.refreshCache();
+        refreshAllRuleCaches();
         log.info("删除规则成功: ruleId={}, ruleKey={}", ruleId, rule.getRuleKey());
     }
 
     @Override
     public void refreshCache() {
-        ruleEngine.refreshCache();
+        refreshAllRuleCaches();
         log.info("规则缓存已刷新（通过管理接口）");
+    }
+
+    /** 统一刷新薪资 + 兜底两个规则引擎的缓存 */
+    private void refreshAllRuleCaches() {
+        salaryRuleEngine.refreshCache();
+        fallbackRuleEngine.refreshCache();
     }
 
     /**

@@ -38,7 +38,7 @@ application-dev.yml
 application-prod.yml
 *.secret
 *.key
-.env
+.env*
 
 # ===== 日志文件 =====
 logs/
@@ -49,3 +49,5 @@ logs/
 Thumbs.db
 *.swp
 *.swo
+
+echo "**/odyssey_backup/" >> .gitignore

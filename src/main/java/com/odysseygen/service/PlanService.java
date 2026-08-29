@@ -22,8 +22,6 @@ public interface PlanService {
 
     void deletePlan(Long planId, Long userId);
 
-    String generatePlanAsync(Long userId, ProfileRequest request);
-
     TaskResponse getTaskStatus(String taskId) throws Exception;
 
     /**

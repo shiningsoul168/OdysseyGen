@@ -26,7 +26,11 @@ request.interceptors.response.use(
         if (error.response?.status === 401) {
             localStorage.removeItem('token')
             localStorage.removeItem('userId')
-            window.location.href = '/login'  // 暂时保留硬刷新，等16号后优化
+            // 已在登录/注册页时不再跳转，避免重定向循环
+            const path = window.location.pathname
+            if (path !== '/login' && path !== '/register') {
+                window.location.href = '/login'
+            }
         }
         return Promise.reject(error)
     }

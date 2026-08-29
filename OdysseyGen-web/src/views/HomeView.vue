@@ -311,20 +311,33 @@
             <el-button
                 type="primary"
                 size="large"
-                :loading="generating"
+                :loading="submitting"
                 @click="handleGenerate"
                 style="flex: 1"
             >
-              {{ generating ? '⏳ 生成中（约10-20秒）' : '🚀 生成三条职业路径' }}
+              🚀 生成三条职业路径
             </el-button>
             <el-button
                 size="large"
                 @click="resetForm"
+                :disabled="generating"
                 style="flex: 0 0 auto;"
             >
               🗑️ 重置表单
             </el-button>
           </div>
+          <!-- 生成中的醒目提示 -->
+          <el-alert
+              v-if="generating"
+              type="info"
+              :closable="false"
+              show-icon
+              style="margin-top: 12px;"
+          >
+            <template #title>
+              任务已提交，正在后台生成职业路径，预计 20-40 秒，完成后将跳转到结果页…
+            </template>
+          </el-alert>
         </el-form-item>
       </el-form>
     </el-card>
@@ -376,7 +389,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { generatePlanAsyncApi, getTaskStatusApi } from '../api/plan.js'
@@ -388,6 +401,7 @@ const router = useRouter()
 const planStore = usePlanStore()
 const profileFormRef = ref(null)
 const generating = ref(false)
+const submitting = ref(false)
 const showProfileDialog = ref(false)
 const generateMode = ref('quick')
 
@@ -574,7 +588,7 @@ const handleGenerate = async () => {
   const valid = await profileFormRef.value?.validate().catch(() => false)
   if (!valid) return
 
-  generating.value = true
+  submitting.value = true
   try {
     saveDraft()
 
@@ -590,15 +604,16 @@ const handleGenerate = async () => {
         requestData,
         { 'Idempotent-Key': idempotentKey.value }
     )
+    submitting.value = false
+    generating.value = true
     const taskId = res.data
     ElMessage.info('任务已提交，正在生成路径...')
-    await nextTick()
 
-    let attempts = 0
+    // 轮询任务状态直到 SUCCESS / FAILED / 超时。
+    // 用 for + await sleep 而不是递归 setTimeout：递归写法下 await 只等第一次轮询，
+    // 会导致 finally 提前把 generating 置回 false，提示条显示一下就消失。
     const maxAttempts = 30
-
-    const pollTask = async () => {
-      attempts++
+    for (let attempts = 1; attempts <= maxAttempts; attempts++) {
       try {
         const statusRes = await getTaskStatusApi(taskId)
         const task = statusRes.data
@@ -608,39 +623,30 @@ const handleGenerate = async () => {
           ElMessage.success('生成成功！')
           resetIdempotentKey()
           const planId = task.result?.planId
-          if (planId) {
-            router.push({ path: '/result', query: { planId } })
-          } else {
-            router.push('/result')
-          }
+          router.push(planId ? { path: '/result', query: { planId } } : '/result')
           return
         } else if (task.status === 'FAILED') {
           ElMessage.error(task.error || '生成失败，请重试')
           resetIdempotentKey()
-          generating.value = false
-          return
-        } else if (attempts >= maxAttempts) {
-          ElMessage.error('生成超时，请稍后重试')
-          resetIdempotentKey()
-          generating.value = false
           return
         }
       } catch (e) {
         ElMessage.error('获取任务状态失败，请稍后重试')
         resetIdempotentKey()
-        generating.value = false
         return
       }
-
-      setTimeout(pollTask, 2000)
+      // PENDING：等待 2 秒后再查
+      await new Promise(resolve => setTimeout(resolve, 2000))
     }
-
-    await pollTask()
+    // 轮询超时
+    ElMessage.error('生成超时，请稍后重试')
+    resetIdempotentKey()
 
   } catch (error) {
     ElMessage.error(error.message || '提交失败，请重试')
     resetIdempotentKey()
   } finally {
+    submitting.value = false
     generating.value = false
   }
 }

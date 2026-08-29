@@ -1,7 +1,7 @@
 package com.odysseygen.util;
 
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.odysseygen.enums.GoalTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -17,20 +17,22 @@ import java.util.Map;
 @Slf4j
 public class DeepSeekUtil {
 
-    @Value("${deepseek.api.key}")
-    private String apiKey;
-
-    @Value("${deepseek.api.url:https://api.deepseek.com/v1/chat/completions}")
-    private String apiUrl;
-
-    @Value("${deepseek.api.model:deepseek-v4-pro}")
-    private String modelName;
-
+    private final String apiKey;
+    private final String apiUrl;
+    private final String modelName;
     private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper = JsonMapper.builder().build();
+    private final ObjectMapper objectMapper;
 
-    public DeepSeekUtil() {
-        // ✅ 配置超时：连接超时 5s，读取超时 35s
+    public DeepSeekUtil(
+            @Value("${deepseek.api.key}") String apiKey,
+            @Value("${deepseek.api.url:https://api.deepseek.com/v1/chat/completions}") String apiUrl,
+            @Value("${deepseek.api.model:deepseek-v4-pro}") String modelName,
+            ObjectMapper objectMapper) {
+        this.apiKey = apiKey;
+        this.apiUrl = apiUrl;
+        this.modelName = modelName;
+        this.objectMapper = objectMapper;
+        // 配置超时：连接超时 5s，读取超时 60s
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);
         factory.setReadTimeout(60000);
@@ -44,7 +46,7 @@ public class DeepSeekUtil {
      * @param profileJson 用户画像 JSON
      * @return AI 返回的原始 JSON 字符串（包含三条路径）
      */
-    public String generatePaths(Integer goalType, String profileJson, Integer graduationYear, Map<String, Object> goalData) {
+    public String generatePaths(Integer goalType, String profileJson, Integer graduationYear, Map<String, Object> goalData) throws Exception {
         String prompt = buildPrompt(goalType, profileJson, graduationYear, goalData);
 
         // 2. 构建请求体
@@ -90,12 +92,8 @@ public class DeepSeekUtil {
     }
 
     private String buildPrompt(Integer goalType, String profileJson, Integer graduationYear, Map<String, Object> goalData) {
-        String goalTypeName = switch (goalType) {
-            case 1 -> "就业";
-            case 2 -> "考研";
-            case 3 -> "考公";
-            default -> "未知";
-        };
+        GoalTypeEnum goalTypeEnum = GoalTypeEnum.fromCode(goalType);
+        String goalTypeName = goalTypeEnum != null ? goalTypeEnum.getDesc() : "未知";
 
         int currentYear = java.time.LocalDate.now().getYear();
         int grade = graduationYear - currentYear;

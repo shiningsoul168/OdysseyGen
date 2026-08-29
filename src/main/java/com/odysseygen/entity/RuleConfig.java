@@ -19,7 +19,7 @@ public class RuleConfig {
     private String ruleName;
 
     /**
-     * 规则类型：1-硬性过滤 2-软性扣分 3-推荐加权
+     * 规则类型：1-硬性过滤 2-软性扣分 3-薪资加权(SALARY)，见 RuleTypeEnum
      */
     private Integer ruleType;
 

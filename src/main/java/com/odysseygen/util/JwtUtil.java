@@ -29,9 +29,10 @@ public class JwtUtil {
     /**
      * 生成 Token
      */
-    public String generateToken(Long userId, String username) {
+    public String generateToken(Long userId, String username, String role) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
+        claims.put("role", role);
         return Jwts.builder()
                 .claims(claims)
                 .subject(username)
@@ -64,6 +65,10 @@ public class JwtUtil {
      */
     public Long getUserId(String token) {
         return extractClaim(token, claims -> claims.get("userId", Long.class));
+    }
+
+    public String getRole(String token) {
+        return extractClaim(token, claims -> claims.get("role", String.class));
     }
 
     /**

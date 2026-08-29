@@ -5,7 +5,7 @@
       <h2>📊 你的三条职业路径</h2>
       <div class="header-actions">
         <el-button type="primary" @click="goHome">重新填写</el-button>
-        <el-button type="success" @click="savePlan">💾 保存此规划</el-button>
+        <el-button type="success" @click="savePlan">⭐ 收藏此规划</el-button>
       </div>
     </div>
 
@@ -139,6 +139,7 @@ const loading = ref(false)
 const chartRef = ref(null)
 const paths = ref([])
 let chartInstance = null
+let resizeHandler = null
 
 // 路径类型工具
 const pathTypeMap = {
@@ -208,7 +209,10 @@ const initChart = () => {
   }
 
   chartInstance.setOption(option)
-  window.addEventListener('resize', () => chartInstance?.resize())
+  // 先移除旧的监听，避免重复挂载导致内存泄漏
+  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
+  resizeHandler = () => chartInstance?.resize()
+  window.addEventListener('resize', resizeHandler)
 }
 
 // 页面操作
@@ -221,10 +225,11 @@ const goHome = () => {
 }
 const savePlan = async () => {
   try {
-    const planId = planStore.currentPlan?.planId || paths.value[0]?.planId
+    // 优先取 store 里的 planId，否则从路由 query 取（从历史页进入时 store 已被清空）
+    const planId = planStore.currentPlan?.planId || parseInt(route.query.planId)
     if (planId) {
       await toggleFavoriteApi(planId)
-      ElMessage.success('已收藏')
+      ElMessage.success('操作成功')
     } else {
       ElMessage.warning('请先生成规划')
     }
@@ -299,16 +304,11 @@ const startTracking = async (index) => {
   }
 }
 
-// 查看完整规划（可展开详情）
-const viewDetail = (index) => {
-  // 滚动到对应卡片或展开详情
-  const cards = document.querySelectorAll('.path-card')
-  if (cards[index]) {
-    cards[index].scrollIntoView({ behavior: 'smooth' })
-  }
-}
-
 onUnmounted(() => {
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+    resizeHandler = null
+  }
   if (chartInstance) {
     chartInstance.dispose()
     chartInstance = null
