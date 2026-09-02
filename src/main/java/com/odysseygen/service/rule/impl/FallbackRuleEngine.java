@@ -97,6 +97,11 @@ public class FallbackRuleEngine {
             rules = Collections.emptyList();
         } else {
             rules = new ArrayList<>(rules);
+            // 按优先级降序排序：findTemplate 返回第一条命中的模板，必须保证高优先级规则优先被匹配
+            // （与 SalaryRuleEngine 的加载逻辑保持一致，否则规则命中顺序不稳定）
+            rules.sort((a, b) -> Integer.compare(
+                    b.getPriority() != null ? b.getPriority() : 0,
+                    a.getPriority() != null ? a.getPriority() : 0));
             try {
                 String json = objectMapper.writeValueAsString(rules);
                 redisTemplate.opsForValue().set(CACHE_KEY, json, CACHE_TTL);

@@ -18,6 +18,7 @@ public class ProfileRequest {
     private Integer schoolLevel;
     private Integer englishLevel;
     private Boolean isPartyMember;
+    @NotNull(message = "毕业年份不能为空")
     private Integer graduationYear;
 
     private Map<String, Object> goalData;   // 动态字段（就业/考研/考公专属）

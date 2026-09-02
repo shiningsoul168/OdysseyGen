@@ -1,0 +1,10 @@
+target/
+.git/
+.idea/
+*.iml
+OdysseyGen-web/node_modules/
+OdysseyGen-web/dist/
+logs/
+*.md
+秋招*.md
+DEPLOY.md

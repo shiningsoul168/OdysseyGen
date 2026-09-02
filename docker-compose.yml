@@ -1,0 +1,21 @@
+# 版本：compose V2
+# 使用：服务器上先建 .env（模板见 DEPLOY.md），再 docker compose up -d
+services:
+  app:
+    build: .
+    image: odysseygen:latest
+    container_name: odysseygen
+    restart: unless-stopped
+    # 直连宿主机 MySQL/Redis（同机部署，2C2G 不再起 DB 容器）
+    network_mode: host
+    environment:
+      TZ: Asia/Shanghai
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 必须在 .env 中设置}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须在 .env 中设置}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY 必须在 .env 中设置}
+    # 2C2G 内存上限保护，防止容器把宿主机内存吃光
+    mem_limit: 768m
+    cpus: 1.5
+    volumes:
+      - ./logs:/app/logs

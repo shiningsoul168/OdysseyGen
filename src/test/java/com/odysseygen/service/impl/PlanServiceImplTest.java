@@ -17,12 +17,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -87,7 +90,7 @@ class PlanServiceImplTest {
         request.setMajor("软件工程");
 
         when(valueOperations.get(CACHE_KEY)).thenReturn(null);
-        when(valueOperations.setIfAbsent(anyString(), eq("1"), any())).thenReturn(true);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(true);
         when(deepSeekUtil.generatePaths(any(), any(), any(), any())).thenReturn(AI_RESPONSE);
         PathResponse expected = new PathResponse();
         expected.setPlanId(200L);
@@ -108,8 +111,52 @@ class PlanServiceImplTest {
         request.setMajor("软件工程");
 
         when(valueOperations.get(CACHE_KEY)).thenReturn(null);
-        when(valueOperations.setIfAbsent(anyString(), eq("1"), any())).thenReturn(false);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(false);
 
         assertThrows(BusinessException.class, () -> planService.generatePlan(1L, request));
+    }
+
+    @Test
+    void testRedisDownShouldDegradeToLocalLockAndSucceed() throws Exception {
+        // Redis 连接异常 → cacheOrLock 捕获 → 降级为本地锁 + 无缓存直连，AI 照常生成落库
+        ProfileRequest request = new ProfileRequest();
+        request.setGoalType(1);
+        request.setMajor("软件工程");
+
+        when(valueOperations.get(CACHE_KEY))
+                .thenThrow(new RedisConnectionFailureException("redis down"));
+        when(deepSeekUtil.generatePaths(any(), any(), any(), any())).thenReturn(AI_RESPONSE);
+        PathResponse expected = new PathResponse();
+        expected.setPlanId(300L);
+        when(planPersistenceService.savePlan(any(), any(), any())).thenReturn(300L);
+        when(planPersistenceService.buildResponse(any(), any(), any())).thenReturn(expected);
+
+        PathResponse result = planService.generatePlan(1L, request);
+
+        assertEquals(300L, result.getPlanId());
+        verify(deepSeekUtil, times(1)).generatePaths(any(), any(), any(), any());
+        // 降级路径不写缓存（Redis 不可用）
+        verify(valueOperations, never()).set(anyString(), any(), any());
+    }
+
+    @Test
+    void testUnlockLuaScriptExecutedInFinally() throws Exception {
+        // 成功路径的 finally 必须调用 unlock（Lua 脚本执行，校验 value 后删除锁）
+        ProfileRequest request = new ProfileRequest();
+        request.setGoalType(1);
+        request.setMajor("软件工程");
+
+        when(valueOperations.get(CACHE_KEY)).thenReturn(null);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(true);
+        when(deepSeekUtil.generatePaths(any(), any(), any(), any())).thenReturn(AI_RESPONSE);
+        PathResponse expected = new PathResponse();
+        expected.setPlanId(200L);
+        when(planPersistenceService.savePlan(any(), any(), any())).thenReturn(200L);
+        when(planPersistenceService.buildResponse(any(), any(), any())).thenReturn(expected);
+
+        planService.generatePlan(1L, request);
+
+        verify(redisTemplate).execute(
+                any(DefaultRedisScript.class), anyList(), anyString());
     }
 }

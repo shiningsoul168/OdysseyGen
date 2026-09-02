@@ -1,6 +1,7 @@
 package com.odysseygen.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.odysseygen.common.BusinessException;
 import com.odysseygen.enums.GoalTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -95,6 +96,10 @@ public class DeepSeekUtil {
         GoalTypeEnum goalTypeEnum = GoalTypeEnum.fromCode(goalType);
         String goalTypeName = goalTypeEnum != null ? goalTypeEnum.getDesc() : "未知";
 
+        // 防御：graduationYear 为 null 时直接失败（ProfileRequest 已 @NotNull，这里兜底防止绕过后端校验导致 NPE）
+        if (graduationYear == null) {
+            throw new BusinessException(400, "毕业年份不能为空，请先完善个人画像");
+        }
         int currentYear = java.time.LocalDate.now().getYear();
         int grade = graduationYear - currentYear;
         String gradeName;
@@ -106,10 +111,8 @@ public class DeepSeekUtil {
             gradeName = "大三";
         } else if (grade == 1) {
             gradeName = "大四";
-        } else if (grade == 0) {
-            gradeName = "已毕业";
         } else {
-            gradeName = "大三";  // 兜底
+            gradeName = "已毕业";  // grade <= 0：今年或更早毕业
         }
 
         String salaryConstraint = "";

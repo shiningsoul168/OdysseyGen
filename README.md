@@ -22,7 +22,7 @@ OdysseyGen 是一款面向大学生的职业规划工具。用户填写个人画
 | ORM | MyBatis-Plus | 3.5.17 |
 | 缓存 | Redis (Lettuce) | - |
 | 熔断降级 | Resilience4j | 2.3.0 |
-| 限流 | Caffeine + 滑动窗口（本地限流） | - |
+| 限流 | Redis ZSET 滑动窗口 + Lua（分布式限流） | - |
 | 安全 | JWT (JJWT) + BCrypt | 0.12.6 |
 | 参数校验 | Spring Validation | - |
 | 前端框架 | Vue 3 + Vite | 3.5.39 |
@@ -179,7 +179,8 @@ AI 生成三条差异化路径（主流/备用/理想），每条路径包含时
 
 - [x] 用户认证（JWT + BCrypt）
 - [x] AI 异步生成 + 熔断降级
-- [x] 缓存击穿防护（分布式锁 + Double-Check）
+- [x] 缓存击穿防护（分布式锁 + Double-Check，Lua 校验解锁）
+- [x] 分布式锁故障降级（Redis 不可用 → 本地锁 + 无缓存直连）
 - [x] 幂等性控制
 - [x] 路径跟踪 + 里程碑进度管理
 - [x] 历史记录 + 收藏/删除
@@ -187,8 +188,9 @@ AI 生成三条差异化路径（主流/备用/理想），每条路径包含时
 - [x] 快速/完整模式切换
 - [x] 索引优化 + 性能调优
 - [x] 已部署上线（阿里云 2C2G）
-- [x] 本地限流（Caffeine 滑动窗口，3次/分钟）
-- [ ] 分布式限流（计划中）
+- [x] 分布式限流（Redis ZSET + Lua 滑动窗口，3次/分钟；Redis 故障 fail-open）
+- [x] Docker 容器化（Dockerfile + docker-compose，见 [DEPLOY.md](DEPLOY.md)）
+- [x] 单元测试 32 个（规则引擎 / 条件匹配 / 限流 / 锁降级，全绿）
 
 ---
 

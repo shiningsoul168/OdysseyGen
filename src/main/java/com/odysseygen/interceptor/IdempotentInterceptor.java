@@ -44,8 +44,16 @@ public class IdempotentInterceptor implements HandlerInterceptor {
         String key = idempotent.prefix() + userId + ":" + idempotentKey;
 
         // 尝试存入 Redis（SETNX 原子操作）
-        Boolean success = redisTemplate.opsForValue()
-                .setIfAbsent(key, "1", Duration.ofSeconds(idempotent.ttl()));
+        Boolean success;
+        try {
+            success = redisTemplate.opsForValue()
+                    .setIfAbsent(key, "1", Duration.ofSeconds(idempotent.ttl()));
+        } catch (Exception e) {
+            // Redis 故障时 fail-open（与限流器一致）：幂等是保护组件，不能让它在故障时拖垮接口；
+            // 代价是 Redis 故障期间无法拦截重复提交，可接受（同画像还有缓存锁兜底）
+            log.warn("Redis 不可用，幂等校验 fail-open 放行: key={}, 错误: {}", key, e.getMessage());
+            return true;
+        }
 
         if (success == null || !success) {
             log.warn("重复请求拦截: userId={}, key={}", userId, key);

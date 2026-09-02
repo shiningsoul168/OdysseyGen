@@ -36,6 +36,10 @@ public class PlanController {
         try {
             PathResponse response = planService.generatePlan(userId, request.getProfile());
             return Result.success("生成成功", response);
+        } catch (BusinessException e) {
+            // 业务异常保留错误码（如锁竞争、AI 生成失败等），避免被兜底 catch 吞成 500
+            log.warn("生成规划业务异常: code={}, message={}", e.getCode(), e.getMessage());
+            return Result.error(e.getCode(), e.getMessage());
         } catch (Exception e) {
             log.error("生成规划失败", e);
             return Result.error("生成失败：" + (e.getMessage() != null ? e.getMessage() : "未知错误"));
@@ -98,9 +102,6 @@ public class PlanController {
     @Idempotent(ttl = 300)
     public Result<String> generateAsync(@Valid @RequestBody GenerateRequest request,
                                         @RequestAttribute Long userId) {
-        // ✅ 加日志验证限流服务是否注入
-        log.info("===== rateLimiterService 是否为空: " + (rateLimiterService == null) + " =====");
-
         if (!rateLimiterService.tryAcquire(userId)) {
             return Result.error(429, "请求过于频繁，请稍后再试（每分钟最多3次）");
         }

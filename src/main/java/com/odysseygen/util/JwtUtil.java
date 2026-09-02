@@ -3,6 +3,7 @@ package com.odysseygen.util;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,22 @@ public class JwtUtil {
 
     @Value("${jwt.expiration}")
     private Long expiration;
+
+    /**
+     * 启动期校验：HS256 要求密钥 ≥ 32 字节。
+     * 用默认占位符（如 your_jwt_secret_here，仅 20 字节）启动时，
+     * 若不校验会"应用能起、但登录抛 WeakKeyException、全站 401"，故障极难定位——这里直接 fail-fast。
+     */
+    @PostConstruct
+    public void validateConfig() {
+        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException(
+                    "jwt.secret 长度不足 32 字节（HS256 最低要求）。请通过环境变量 JWT_SECRET 配置强随机密钥。");
+        }
+        if (expiration == null || expiration <= 0) {
+            throw new IllegalStateException("jwt.expiration 必须为正数（毫秒）");
+        }
+    }
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));

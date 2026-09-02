@@ -17,4 +17,7 @@ public class CacheConstants {
 
     /** 异步任务状态 TTL */
     public static final Duration TASK_TTL = Duration.ofMinutes(5);
+
+    /** 分布式限流 Key 前缀（Redis ZSET 滑动窗口） */
+    public static final String RATE_LIMIT_PREFIX = "rate:limit:";
 }

@@ -166,9 +166,9 @@ CREATE TABLE `rule_config` (
 -- 种子数据
 -- =====================================================================
 
--- 演示管理员账号：testuser / 123456（role=ADMIN，可访问 /api/admin/**）
-INSERT INTO `user_info` (`username`, `password`, `email`, `status`, `role`, `created_at`, `updated_at`)
-VALUES ('testuser', '$2a$10$jOAW7XwtOyaKFtt78A.cYOB7GzZphV83SaFTFBDZlAGGt2HSi45KO', 'test@example.com', 1, 'ADMIN', NOW(), NOW());
+-- ⚠️ 安全说明：曾内置演示管理员账号（testuser/123456），因公开仓库可被直接登录获取
+-- ADMIN 角色而移除。如需管理员账号，请通过注册接口创建普通用户后手动执行：
+--   UPDATE user_info SET role='ADMIN' WHERE username='你的用户名';
 
 -- 薪资规则（rule_type=3 表示 SALARY，供规则引擎计算就业方向薪资系数）
 INSERT INTO `rule_config`

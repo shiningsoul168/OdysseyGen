@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.odysseygen.common.BusinessException;
 import com.odysseygen.common.ResultCode;
 import com.odysseygen.constant.CacheConstants;
@@ -27,11 +29,17 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -49,6 +57,17 @@ public class PlanServiceImpl implements PlanService {
     private final AiGenerateTaskService aiGenerateTaskService;
     private final PlanPersistenceService planPersistenceService;
     private final FallbackService fallbackService;
+
+    /**
+     * 本地锁池：仅用于 Redis 不可用时的降级模式（generateWithLocalLock）。
+     * 实现：Caffeine 缓存按 lockKey 复用 ReentrantLock，过期自动淘汰，避免 Map 无限增长；
+     * tryLock() 非阻塞抢占，语义与 Redis SETNX 一致：抢不到立即失败。
+     * 注意：本地锁只在单实例内互斥，多实例部署时降级模式允许少量重复生成（可接受的降级代价）。
+     */
+    private final Cache<String, ReentrantLock> localLocks = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
 
     // ======================== 生成入口 ========================
 
@@ -83,14 +102,30 @@ public class PlanServiceImpl implements PlanService {
     }
 
     /**
-     * 缓存 + 分布式锁模板：
+     * 缓存 + 分布式锁模板（入口）：
+     * 1. 正常走 Redis 缓存 + 分布式锁（cacheOrLockWithRedis）
+     * 2. Redis 整体不可用时降级为直连模式：跳过缓存，用 JVM 本地锁保证单实例互斥，服务不中断
+     */
+    private PathResponse cacheOrLock(ProfileRequest request, Long userId,
+                                     Supplier<String> aiCallSupplier) throws Exception {
+        try {
+            return cacheOrLockWithRedis(request, userId, aiCallSupplier);
+        } catch (RedisConnectionFailureException | RedisSystemException | QueryTimeoutException e) {
+            // Redis 故障（连接失败/超时/系统异常）：降级为无缓存直连，避免整个生成功能不可用
+            log.warn("⚠️ Redis 不可用，降级为直连模式（无缓存 + 本地锁）: {}", e.getMessage());
+            return generateWithLocalLock(request, userId, aiCallSupplier);
+        }
+    }
+
+    /**
+     * 缓存 + 分布式锁模板（Redis 路径）：
      * 1. 缓存命中 → 解析后直接落库（保证命中缓存的用户也能有自己的历史记录）
      * 2. 抢锁失败 → 返回繁忙
      * 3. Double-check
      * 4. 调用 AI 生成 → 先校验再写缓存 → 落库
      */
-    private PathResponse cacheOrLock(ProfileRequest request, Long userId,
-                                     Supplier<String> aiCallSupplier) throws Exception {
+    private PathResponse cacheOrLockWithRedis(ProfileRequest request, Long userId,
+                                              Supplier<String> aiCallSupplier) throws Exception {
         String cacheKey = cacheKeyUtil.generateCacheKey(request);
         String lockKey = cacheKey + CacheConstants.LOCK_SUFFIX;
 
@@ -105,9 +140,10 @@ public class PlanServiceImpl implements PlanService {
             }
         }
 
-        // 第二处：抢分布式锁（SETNX）
+        // 第二处：抢分布式锁（SETNX），value 为唯一标识，防止 Full GC 停顿期间锁超时被误删
+        String lockValue = UUID.randomUUID().toString() + ":" + Thread.currentThread().getId();
         Boolean locked = redisTemplate.opsForValue()
-                .setIfAbsent(lockKey, "1", CacheConstants.LOCK_TTL);
+                .setIfAbsent(lockKey, lockValue, CacheConstants.LOCK_TTL);
         if (!Boolean.TRUE.equals(locked)) {
             // 相同画像的另一个用户正在生成（AI 调用约 20-40s），提示稍后重试
             throw new BusinessException("系统繁忙：相同画像的规划正在生成中，请约 20-40 秒后重试");
@@ -143,8 +179,55 @@ public class PlanServiceImpl implements PlanService {
 
             return response;
         } finally {
-            redisTemplate.delete(lockKey);
+            try {
+                // 解锁时校验 value，仅当锁仍属于当前线程时才删除，避免 Full GC 停顿导致锁超时后被其他线程持有而误删
+                unlock(lockKey, lockValue);
+            } catch (Exception e) {
+                // Redis 故障等场景下解锁失败：锁会随 TTL 自动过期，不影响主流程，也不能掩盖业务异常
+                log.warn("解锁失败，锁将随 TTL 自动过期: {}", lockKey, e);
+            }
         }
+    }
+
+    /**
+     * 降级模式：Redis 不可用时跳过缓存，直接用本地锁互斥后 AI 生成并落库。
+     * - 单实例内仍保证"相同画像"互斥（语义与 Redis 锁一致：抢不到立即提示稍后重试）
+     * - 多实例部署时本地锁无法跨实例互斥，允许少量重复生成（可接受的降级代价）
+     * - 不写缓存（Redis 不可用），DB 仍是数据源，主流程不受影响
+     */
+    private PathResponse generateWithLocalLock(ProfileRequest request, Long userId,
+                                               Supplier<String> aiCallSupplier) throws Exception {
+        String cacheKey = cacheKeyUtil.generateCacheKey(request);
+        String lockKey = cacheKey + CacheConstants.LOCK_SUFFIX;
+
+        ReentrantLock localLock = localLocks.get(lockKey, k -> new ReentrantLock());
+        if (!localLock.tryLock()) {
+            // 与 Redis 模式一致：抢锁失败立即提示稍后重试，避免长时间阻塞
+            throw new BusinessException("系统繁忙：相同画像的规划正在生成中，请约 20-40 秒后重试");
+        }
+
+        try {
+            log.info("⏳ [降级模式] 无缓存，直接 AI 生成... 画像: {}, 用户: {}", request.getMajor(), userId);
+            String aiResponse = aiCallSupplier.get();
+            List<Map<String, Object>> paths = parsePaths(aiResponse);
+            Long planId = planPersistenceService.savePlan(userId, request, paths);
+            return planPersistenceService.buildResponse(planId, paths, request);
+        } finally {
+            localLock.unlock();
+        }
+    }
+
+    /**
+     * 释放分布式锁：通过 Lua 脚本先校验 value 再删除，保证原子性。
+     * 若锁已被其他线程持有（value 不匹配），则不删除，避免误删他人锁。
+     */
+    public void unlock(String lockKey, String lockValue) {
+        String script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+        redisTemplate.execute(
+                new DefaultRedisScript<>(script, Long.class),
+                Collections.singletonList(lockKey),
+                lockValue
+        );
     }
 
     /** 解析 AI 返回的 paths 数组，非法/为空时抛异常 */

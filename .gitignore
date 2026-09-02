@@ -39,6 +39,8 @@ application-prod.yml
 *.secret
 *.key
 .env*
+# .env.example 是模板（不含真实密钥），保留入库
+!.env.example
 
 # ===== 日志文件 =====
 logs/
@@ -50,4 +52,13 @@ Thumbs.db
 *.swp
 *.swo
 
-echo "**/odyssey_backup/" >> .gitignore
+# ===== 数据库备份（含真实数据，严禁入库） =====
+**/odyssey_backup/
+*.sql.gz
+
+# ===== 反编译/临时残留 =====
+io/
+
+# ===== 个人面试准备文档（不入公开仓库） =====
+秋招*.md
+
