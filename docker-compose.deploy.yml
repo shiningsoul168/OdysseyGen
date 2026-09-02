@@ -1,0 +1,7 @@
+# 线上部署覆盖文件：使用预构建 jar 的单阶段 Dockerfile（Dockerfile.deploy）
+# 用法: docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d --build
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.deploy

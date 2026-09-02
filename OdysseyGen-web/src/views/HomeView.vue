@@ -311,7 +311,8 @@
             <el-button
                 type="primary"
                 size="large"
-                :loading="submitting"
+                :loading="submitting || generating"
+                :disabled="submitting || generating"
                 @click="handleGenerate"
                 style="flex: 1"
             >
@@ -320,13 +321,13 @@
             <el-button
                 size="large"
                 @click="resetForm"
-                :disabled="generating"
+                :disabled="submitting || generating"
                 style="flex: 0 0 auto;"
             >
               🗑️ 重置表单
             </el-button>
           </div>
-          <!-- 生成中的醒目提示 -->
+          <!-- 生成中的醒目提示（快速模式更慢，提示时间不同） -->
           <el-alert
               v-if="generating"
               type="info"
@@ -335,7 +336,9 @@
               style="margin-top: 12px;"
           >
             <template #title>
-              任务已提交，正在后台生成职业路径，预计 20-40 秒，完成后将跳转到结果页…
+              {{ generateMode === 'quick'
+                  ? '任务已提交，快速模式生成较慢，预计 40-60 秒，请耐心等待，完成后将自动跳转…'
+                  : '任务已提交，正在后台生成职业路径，预计 20-40 秒，完成后将跳转到结果页…' }}
             </template>
           </el-alert>
         </el-form-item>
@@ -585,6 +588,9 @@ const submitProfile = async (formData) => {
 
 // ====== 生成规划 ======
 const handleGenerate = async () => {
+  // 防重入：提交或生成中直接忽略（配合按钮 disabled 双保险，杜绝整个周期内的重复提交）
+  if (submitting.value || generating.value) return
+
   const valid = await profileFormRef.value?.validate().catch(() => false)
   if (!valid) return
 
@@ -612,7 +618,8 @@ const handleGenerate = async () => {
     // 轮询任务状态直到 SUCCESS / FAILED / 超时。
     // 用 for + await sleep 而不是递归 setTimeout：递归写法下 await 只等第一次轮询，
     // 会导致 finally 提前把 generating 置回 false，提示条显示一下就消失。
-    const maxAttempts = 30
+    // 快速模式生成较慢（40-60s），轮询上限放宽到 100s；完整模式 60s 足够。
+    const maxAttempts = generateMode.value === 'quick' ? 50 : 30
     for (let attempts = 1; attempts <= maxAttempts; attempts++) {
       try {
         const statusRes = await getTaskStatusApi(taskId)
@@ -639,7 +646,9 @@ const handleGenerate = async () => {
       await new Promise(resolve => setTimeout(resolve, 2000))
     }
     // 轮询超时
-    ElMessage.error('生成超时，请稍后重试')
+    ElMessage.error(generateMode.value === 'quick'
+        ? '生成超时（超过 100 秒），可稍后点击重新生成'
+        : '生成超时，请稍后重试')
     resetIdempotentKey()
 
   } catch (error) {

@@ -1,0 +1,13 @@
+# 线上快速部署用：直接打包已构建产物（单阶段，快、可复现）
+# 仓库根目录的 Dockerfile 是多阶段（源码构建），用于 CI/本地验证；
+# 生产服务器用本文件部署预构建 jar，避免在 2C2G 上跑 Maven 构建。
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+
+ENV TZ=Asia/Shanghai \
+    JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+COPY app.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
