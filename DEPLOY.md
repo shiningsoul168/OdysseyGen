@@ -1,7 +1,65 @@
 # OdysseyGen 部署指南
 
 > 环境：2C2G 阿里云（2 核 2G），MySQL 8 + Redis 直接运行在宿主机，应用同机部署。
-> 两种方式任选：**A. 传统 jar 部署**（现状） / **B. Docker 容器化**（推荐逐步迁移）。
+> 两种方式任选：**A. 传统 jar 部署**（现状） / **B. Docker 容器化**（✅ 2026-09 已上线，见"实际部署踩坑记录"）。
+> 线上现状：后端 Docker 容器（host 网络，mem 768m）+ nginx 托管前端（/opt/dist）。
+
+---
+
+## ⚠️ 实际部署踩坑记录（2026-09 容器化实录，面试可讲）
+
+> 这些坑都是真实踩过并解决的，按"现象 → 原因 → 解法"记录。面试讲容器化部署时，主动说其中 2-3 个，比背 Dockerfile 命令有说服力得多。
+
+### 坑 1：`get.docker.com` 安装脚本不识别 Alibaba Cloud Linux
+- **现象**：`curl -fsSL https://get.docker.com | sh` 报 `ERROR: Unsupported distribution 'alinux'`
+- **原因**：官方脚本的发行版白名单不含 alinux
+- **解法**：改用阿里云 docker-ce 镜像仓库手动装：
+  ```bash
+  dnf config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+  sed -i 's/\$releasever/8/g' /etc/yum.repos.d/docker-ce.repo   # alinux3 兼容 CentOS 8 包
+  rpm --import https://mirrors.aliyun.com/docker-ce/linux/centos/gpg
+  dnf install -y --nogpgcheck docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  ```
+
+### 坑 2：Docker 镜像加速器选错导致 `docker pull` 卡死/极慢
+- **现象**：`docker pull eclipse-temurin:17-jre` 卡住或 8MB 下半天
+- **原因**：配置了已停止服务的镜像源（`dockerproxy.net` 2024 年已关停）；daocloud 系列在部分地域慢
+- **解法**：先探测哪些源真的可达，再排序：
+  ```bash
+  for m in docker.1ms.run docker.m.daocloud.io m.daocloud.io docker.1panel.live hub.rat.dev; do
+    printf '%-22s' "$m"; timeout 10 curl -sI "https://$m/v2/" | head -1 || echo FAIL
+  done
+  # 200/401 = 可达；改 /etc/docker/daemon.json 把最快的放最前，systemctl restart docker
+  ```
+- **经验**：国内服务器配镜像加速别只抄网上的源列表——**先测再用**；已完成层会缓存，换源后重拉不重头下载。
+
+### 坑 3：scp 上传目录产生嵌套子目录
+- **现象**：`scp -r 本地dist root@ip:/opt/dist` 后，文件落在 `/opt/dist/本地目录名/` 里，nginx 403
+- **原因**：scp 拷贝目录时会以"目标路径 + 目录名"落盘
+- **解法**：用 tar 打包后单文件上传再解压（结构 100% 可控）：
+  ```bash
+  tar -czf dist.tar.gz -C dist .
+  scp dist.tar.gz root@ip:/tmp/
+  ssh root@ip "mkdir -p /opt/dist.new && tar xzf /tmp/dist.tar.gz -C /opt/dist.new"
+  ```
+
+### 坑 4：上传后 nginx 403（目录权限 700）
+- **现象**：首页 403 Forbidden
+- **原因**：scp 从 Windows 拷出的目录权限是 `drwx------`（700，仅 root），nginx worker 以 nginx 用户运行读不了
+- **解法**：`chmod -R 755 /opt/dist && chmod 644 /opt/dist/index.html`
+
+### 坑 5：前端更新后线上"没变化"——浏览器缓存
+- **现象**：重新构建部署后，页面行为还是旧的
+- **原因**：浏览器缓存了旧 index.html（无强缓存头时仍可能命中启发式缓存）
+- **解法**：① 无痕窗口或 Ctrl+Shift+R 验证；② 服务端确认法：`grep` 新文案是否在新 bundle、对比 nginx 返回的 index.html 与磁盘 md5；③ 版本文件是 hash 命名，确认加载到新 hash 即可。
+
+### 坑 6：切换部署的原子操作与回滚
+- **经验**：生产切换必须"备份 → 新目录 → 原子 mv 替换 → 验证 → 保留回滚路径"：
+  ```bash
+  rm -rf /opt/dist.prev && mv /opt/dist /opt/dist.prev && mv /opt/dist.new /opt/dist
+  # 回滚: rm -rf /opt/dist && mv /opt/dist.prev /opt/dist
+  ```
+- 后端切换同理：旧 jar 先备份到 `/opt/backup/`（含启动参数记录），容器起不来时一条命令切回。
 
 ---
 
